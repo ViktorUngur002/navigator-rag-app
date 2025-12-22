@@ -12,6 +12,9 @@ application.yml
 ### Loacal  PostgreSQL Volumes ###
 postgres_data/
 
+### App Data ###
+file_data/
+
 ### STS ###
 .apt_generated
 .classpath
