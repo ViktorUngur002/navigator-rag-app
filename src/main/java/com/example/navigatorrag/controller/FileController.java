@@ -19,7 +19,6 @@ import java.util.List;
 
 @Controller
 public class FileController {
-    // UPLOAD_DIRECTORY removed - we no longer save to disk
     private final MarkdownHeaderSplitter markdownSplitter;
     private final VectorService vectorService;
 

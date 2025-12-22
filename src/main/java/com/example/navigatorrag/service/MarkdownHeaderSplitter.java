@@ -12,7 +12,6 @@ import java.nio.file.Path;
 
 @Service
 public class MarkdownHeaderSplitter {
-    // Modified to accept List<Document> and Path to match your Controller
     public List<Document> splitByH2(List<Document> documents, String filename) {
         List<Document> chunks = new ArrayList<>();
 
