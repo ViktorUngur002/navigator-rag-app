@@ -1,0 +1,178 @@
+h1. EFaktura
+
+{{TOC}}
+
+h2. Podešavanje
+
+h3. Podešavanja putanja ka API-ju za SEF servise:
+
+<pre><code class="sql">
+-- DEMO PUTANJA ZA EFAKTURE
+UPDATE mapiranje SET key = 'https://demoefaktura.mfin.gov.rs/api/publicApi/', opis = 'Ključ za efakture (Trenutno DEMO)' WHERE id_mapiranje = 'efakture#API_URL'
+
+-- PRODUKCIONA PUTANJA ZA EFAKTURE
+UPDATE mapiranje SET key = 'https://efaktura.mfin.gov.rs/api/publicApi/', opis = 'Ključ za efakture (PRODUKCIONI)' WHERE id_mapiranje = 'efakture#API_URL'
+</code></pre>
+
++U slučaju zamene putanja neophodno restartovanje konteksta odnosno tenanta!+
+
+h3. Podešavanje API ključ-a:
+
+U podešavanjima pogledati ključ *EFAKTURE_API_KEY*
+
+h3. Podešavanje automatskog slanja eFaktura
+
+Kroz podtask #163869 je u verziji 2.46.26 omogućena funkcionalnost automatskog slanja eFaktura na sef.
+U konfiguraciji efaktura kad se čekira automatsko_slanje_efaktura, nakon kreiranja dokumenta kroz BN će i na njemu biti čekirano automatsko_slanje_efaktura.
+
+Nakon toga će cron na svakih 20 minuta pokupiti fakture koje zadovoljavaju sledeće uslove
+1) ima čekirano na konfiguraciji automatsko_slanje_efaktura i na rm_dokumentu automatsko_slanje_efaktura.
+2) zaključan je, i ako je podešeno na konfiguraciji i proknjižen
+3) nije već poslat, iliti ako je storniran, nalazi se u ACCEPTED, SENDING,SENT,REJECTED
+
+Dodatno polje na dokumentu omogućava personalizacije obradama ili trigerima, tj da se ovo polje automatski prilagođava u zavisnosti od zatheva korisnika. Najbolje mesto da se ovo uradi jeste poziv procedure nakon zaključavanja dokumenta.
+Klijent može da dečekira automatsko slanje kroz GUI dokumenta.
+
+h2. Statusi
+
+Nacrt -> {brisanje} -> {ponovno slanje}
+
+Nacrt -> Slanje -> Poslato 
+
+Nacrt -> Slanje(duze od 15min) -> Otkazano -> {ponovno slanje} 
+
+Nacrt -> Slanje -> Poslato -> Otkazano -> {ponovno slanje}
+
+Nacrt -> Slanje -> Poslato -> Odbijeno
+
+Nacrt -> Slanje -> Poslato -> Odbijeno -> Stornirano
+
+Nacrt -> Slanje -> Poslato -> Odobreno
+
+Nacrt -> Slanje -> Poslato -> Odobreno -> Stornirano
+
+Nacrt -> Greška prilikom slanja - tu se valjda može nekako ponovo poslati dokument, 
+nisam siguran jel treba otkazati ili obrisati prvo al pošto nismo imali potrebe za tim onda sam i iskulirao tu funkcionalnost
+
+h2. Uputsvo za podešavanje
+
+Za aktiviranje potrebno je podesiti u podešavanjima:
+CompanyDetails_PIB
+CompanyDetails_SHORT_NAME
+EFAKTURE_API_KEY
+
+i proveriti u mapiranjima da li je podešena putanja ka test / produkcionom SEF API-ju (prva tačka u wikiju)
+
+h3. Jedinice mere
+
+Servis za sinhronizaciju jedinica mera se poziva putanjom:
+https://{server}:{port}/{context}/task/update-unit-measures
+
+h2. Greške
+
+|Status greške||
+|Kod greške||
+|Greška||
+|Upis u bn-u| *Nema faktura za slanje* |
+|Objašnjenje|Kako bi dokument bio poslan mora ispunjavati uslove:
+* mora biti zaključan
+* ne sme biti storniran (za sada, dok ne implementujemo storno preko bn-a)
+* na klijentu mora biti štiklirano “Koristi efakture“
+* definicija dokumenta mora biti upisana u konfiguraciji efaktura
+* datum na dokumentu ne sme biti stariji od onog upisanog u konfiguraciji efaktura
+* dokument mora biti proknjižen ukoliko je u konfiguraciji štiklirano “Proknjižen”
+* avans na dokumentu sme biti upisan samo ako je u pitanju Avansna faktura
+* ukoliko je dokumenta u stanju “otkazan”, mora biti poslan slanjem selektovanih faktura, odnosno ne klikom na slanje svih|
+             
+
+
+|Status greške|400 Bad Request|
+|Kod greške|XmlInvalid|
+|Greška|Object reference not set to an instance of an object.|
+|Upis u bn-u| *Nisu upisani dobri podaci.* |
+|Objašnjenje|U suštini najnezahvalinija greška jer može da znači bilo šta. Od loše postavke baze, nenamapiranih mernih jedinica do naše greške ili izmene specifikacije. Kada ovo dobijete proverite sve osnovne podatke tipa da li su postavljena dobra podešavanja, kod za jedinicu mere, pib, jbkjs itd. Ako sve bude delovalo ok, prebaciti task na razvoj.|
+
+|Status greške|400 Bad Request|
+|Kod greške|VATRegistrationCodeLengthInvalid|
+|Greška|VAT registration code must be 9 or 13 characters long|
+|Upis u bn-u| *Nije upisan dobar pib klijenta.* |
+|Objašnjenje|Ako pib deluje ok, dodati 0 na početak npr. “33333333” u “033333333”|
+
+
+|Status greške|400 Bad Request|
+|Kod greške|UBLCompanyIsNonBudgetUser|
+|Greška|"Company with JBKJS ***** is non budget user.|
+|Upis u bn-u| *Klijent nije budžetski korisnik.* |
+|Objašnjenje|Samo odštiklirati “Budžetski korisnik” na klijentu|
+
+
+|Status greške|400 Bad Request|
+|Kod greške|InvoiceRowUnitMissing|
+|Greška|Line item Unit is missing|
+|Upis u bn-u| *Merna jedinica nije mapirana sa kodom mernih jedinica efakture.* |
+|Objašnjenje||
+
+|Status greške|400 Bad Request|
+|Kod greške|UBLVATRegistrationCodeDoesNotMatchTheRegistrationCodeOfTheCompanyWithJBKJS|
+|Greška|The VAT registration code --- does not match the registration code of the company with JBKJS: ---|
+|Upis u bn-u| *Klijentov pib ili jbkjs nisu dobro upisani.* |
+|Objašnjenje||
+
+|Status greške|400 Bad Request|
+|Kod greške|UBLRegistrationCodeDoesNotHaveGoodLength|
+|Greška|The sender's registration code does not have a good length. Registration code: ---
+The receiver's registration code does not have a good length. Registration code:---|
+|Upis u bn-u| *Matični broj nije dobro upisan.* |
+|Objašnjenje|Koriste isti kod za dve greške. Dakle ili je pogrešan matični broj na klijenu ili u podešavanju: “CompanyDetails_MAT_BROJ”|
+
+|Status greške|400 Bad Request|
+|Kod greške|IssueDateCannotBeDifferentFromTodays|
+|Greška|IssueDate is not correct because it cannot be different from todays|
+|Upis u bn-u| *Datum na fakturi mora biti današnji.* |
+|Objašnjenje||
+
+|Status greške|400 Bad Request|
+|Kod greške|UBLPrepaymenInvoiceNotApproved|
+|Greška|Selected prepayment invoice with invoice number ***** is not approved|
+|Upis u bn-u| *Avans nije prihvaćen od strane kupca.* |
+|Objašnjenje||
+
+|Status greške|400 Bad Request|
+|Kod greške|EInvoiceNumberDublicate|
+|Greška|Invoice InvoiceInformation.InvoiceNumber contains duplicates|
+|Upis u bn-u| *Ista faktura se ne može poslati dva puta.* |
+|Objašnjenje||
+
+
+|Status greške|401 Unauthorized|
+|Kod greške||
+|Greška||
+|Upis u bn-u||
+|Objašnjenje|Ne valja api ključ ili morate promeniti vrednost mapiranja “efakture#API_URL” ako je demo okruženje.
+                      Uz to nam se desila situacija da im je servis javio ovu grešku iako su podaci bili dobri. Greška se rešila sama od sebe nakon desetak minuta.
+|
+
+|Status greške|400 Bad Request|
+|Kod greške|NoneOfInputParametersIsDefined|
+|Greška|None of the input parameters is defined (JBKJS, VatNumber, RegistrationNumber)|
+|Upis u bn-u| *Nisu upisani pib, matični broj i jbkjs klijenta.* |
+|Objašnjenje|Nisu upisani ni jbkjs ni pib ni maticni broj. Ovo smo dobili pri proveri da li je klijent registrovan na efakture. Ukoliko ne želite tu proveru na definiciji dokumenta odštiklirati podešavanje “Provera statusa klijenta EF”.|
+
+|Status greške|400 Bad Request|
+|Kod greške|UBLInvoiceLinePriceAmountMoreDecimalsThanPermitted|
+|Greška|Invoice line extension amount has more decimals than permitted|
+|Upis u bn-u| *Nije upisan dobar broj decimala u ceni stavke dokumenta.* |
+|Objašnjenje|Nije upisan dobar broj decimala za taj parametar u xml-u. Prebaciti na razvoj.|
+
+
+|Status greške|400 Bad Request|
+|Kod greške|SalesInvoiceNotFound|
+|Greška|Invoice with id ***** not found|
+|Upis u bn-u| *Ne postoji tražena faktura u servisu efaktura.* |
+|Objašnjenje|Verovatno je neko ručno obrisao fakturu preko browsera|
+
+|Status greške|400 Bad Request|
+|Kod greške|InvoiceRowVatRateNotAllowedForVatCategory|
+|Greška|Invoice row VAT rate ---% is not allowed for '---' VAT category|
+|Upis u bn-u| *Postavljeno je pogrešno poresko oslobođenje za datu poreznu stopu na stavci dokumenta.* |
+|Objašnjenje|Svaka vrsta poreskog oslobođenja ima svoj kod tj svoj  “VAT category”. Potrebno je ili upisati odgovarajuće poresko oslobođenje za tu stavku dokumenta ili obrisati poresko oslobođenje u čijem slučaju šaljemo defoltni kod “S”.|

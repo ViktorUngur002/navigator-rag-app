@@ -1,0 +1,12 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: navigatorrag-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=navigatorrag
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data

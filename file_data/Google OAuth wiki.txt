@@ -1,0 +1,69 @@
+h1. Google OAuth
+
+{{toc}}
+
+h2. Podešavanja na Google strani
+
+Uputstvo za podesavanje slanja mail-ova koriscenjem Google OAuth-a
+Uputstvo je dostupno na engleskom jeziku na sledecem linku: https://developers.google.com/identity/protocols/oauth2/service-account
+
+Neophodno je da osoba sa administratorskim prililegijama na google workspace-u generise account service i json credentials. U nastavku ce biti opisan proces korak po korak.
+
+h3. 1) Administrator treba da poseti web stranicu: https://console.cloud.google.com/
+
+h3. 2) Neophodno je kreirati novi projekat
+
+|Klik na projekti| !new1.png!|
+|Klik na *NEW PROJECT*| !new2.png!|
+|Unesite neko ima za Vas projekat (na slici je My Super Cool Project Name), odaberite vasu organizaciju za *Organization* i *Location*| 
+!new3.png!|
+|Neophodno je sacekati nekoliko minuta dok Google kreira Vas novi projekat||
+|Nakon par minuta, pojavice se obavestenje u uspesno kreiranom projaktu|!new4.png!|
+
+h3. 3) Nakon uspesno kreiranog projekta, neophodno je kreirati Service Account
+
+|Administrator workspace-a treba da poseti web stranicu| https://console.cloud.google.com/apis/credentials |
+| Kliknuti na polje za pretragu i ukucati *Gmail API*| !new7.png!|
+| Izabrati opciju: *GMAIL API Google Enterprice API* | !new8.png!|
+| Kliknite dugme *Enable*| !new9.png!|
+|Zatim je potrebno kliknuti na Credentials, ili posetiti web stranicu: https://console.cloud.google.com/apis/credentials| !new10.png!|
+|Nakon toga, klik na CREATE CREDENTIALS| !NEW11.png!|
+|Izabrati Service Account| !new12.png!|
+|Unesite naziv za service account (service account id ce biti automatski popunjen) | !new13.png!|
+|Nakon toga, izaberite Basic => Owner i kliknite continue| !new14.png!|
+|Unesite na oba polja mejl adresu koju zelite da koristite za slanje mejlova i kliknite Done|!new15.png!|
+|Nakon toga, u vasem projektu, pojavice se novi Service Account. Kliknite na njega|!new16.png!|
+|Nakon toga, kliknuti na KEYS|!new17.png!|
+|Klinkuti na ADD KEY, zatim na Create new key|!new18.png!|
+|Izaberite JSON| !new19.png! |
+|Nakon toga, automatski ce se preuzeti vas json fajl. Neophodno je da dostavite podrsci taj fajl. UPOZORENJE! Nije moguce ponovo preuzeti taj fajl. Ukoliko izgubite taj fajl, nephodno je ponoviti sve korake| !new19.png!|
+
+
+h3. 4) Sledeci korak je dodeljivanje Domain-Wide authority za Vas Service Account
+
+1) posetite sledeci link https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts
+2) Izaberite Projekat koji ste kreirali:
+!new20.png!
+3) Nakon toga kliknute na vas Service Account
+!new21.png!
+4) Kliknite na Advanced Setting - Pojavice se dodatna podesavanja
+
+5) Kopirajte vas Client ID i kliknite na VIEW GOOGLE WORKSPACE ADMIN CONSOLE
+!NEW22.PNG!
+
+6) U Admin konzoli, posetite: Main menu => Security => Access and data control => API Controls
+** zatim Manage Domain Wide Delegation
+** Add new
+** zatim unesite vas client id koji ste kopirali
+** za OAuth scopes, unesite https://mail.google.com
+** Kliknite Authorize
+
+h2. Podešavanja u Business Navigator bazi
+
+Neophodno je nakon kreiranja json fajla i dodeljivanja domain wide authority-ja, u bazi podesiti odredjene vrednosti:
+
+* setovati *oauth_enabled* na T
+* setovati vrednosti polja *oauth_json* na sadrzaj kreiranog json fajla
+* setovati *oauth_email* na mejl koji ce biti koriscen za slanje mejlova
+
+Ovako podešena konekcija koristi Goggle API-je za slanje email-ova
