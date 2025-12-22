@@ -10,7 +10,7 @@ application.yml
 .env
 
 ### Loacal  PostgreSQL Volumes ###
-pgdata/
+postgres_data/
 
 ### STS ###
 .apt_generated
