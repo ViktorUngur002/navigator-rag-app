@@ -13,7 +13,7 @@ application.yml
 postgres_data/
 
 ### App Data ###
-file_data/
+# src/main/resources/file_data/
 
 ### STS ###
 .apt_generated

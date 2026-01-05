@@ -35,7 +35,7 @@ public class MarkdownHeaderSplitter {
                     h1Intro = "";
 
                     chunks.add(new Document(finalContent, Map.of(
-                            "source", filename,
+                            "file_name", filename,
                             "type", "wiki_section"
                     )));
                 }
@@ -46,7 +46,7 @@ public class MarkdownHeaderSplitter {
             if (!finalChunk.isEmpty()) {
                 String finalContent = h1Intro.isEmpty() ? finalChunk : h1Intro + "\n\n" + finalChunk;
                 chunks.add(new Document(finalContent, Map.of(
-                        "source", filename,
+                        "file_name", filename,
                         "type", "wiki_section"
                 )));
             }

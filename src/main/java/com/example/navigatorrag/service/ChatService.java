@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -19,13 +20,14 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
 @Service
 public class ChatService {
     public final ChatClient chatClient;
+    public final AuditLogService auditLogService;
     private final ChatClient guardrailClient;
     public final VectorStore vectorStore;
     public final ChatMemory chatMemory;
     private final String RAG_PROMPT_TEMPLATE = """
             Ti si asistent u sistemu Business Navigator. 
-            Ispod se nalazi kontekst iz dokumentacije I prethodna istorija razgovora.
-            Koristi oba izvora da odgovoriš na pitanje. 
+            Ispod se nalazi kontekst iz dokumentacije i prethodna istorija razgovora.
+            Koristi oba izvora da odgovoriš na pitanje, ali nemoj koristiti svoje opste znanje. 
             Ako se odgovor ne nalazi u dokumentaciji, ali ga znaš iz istorije, slobodno ga koristi.
             
             KONTEKST:
@@ -34,6 +36,7 @@ public class ChatService {
 
     public ChatService(ChatClient.Builder builder,
                        VectorStore vectorStore,
+                       AuditLogService auditLogService,
                        ChatMemory chatMemory,
                        @Value("${app.ai.main.model}") String mainModel,
                        @Value("${app.ai.main.temperature}") Double mainTemp,
@@ -41,6 +44,7 @@ public class ChatService {
                        @Value("${app.ai.guardrail.temperature}") Double guardTemp) {
 
         this.vectorStore = vectorStore;
+        this.auditLogService = auditLogService;
         this.chatMemory = chatMemory;
 
         // Main Client for RAG and Tools
@@ -65,6 +69,8 @@ public class ChatService {
             return "Ovo pitanje je izvan opsega aplikacije Business Navigator RAG.";
         }
 
+        long startTime = System.currentTimeMillis();
+
         String systemPrompt = role.equalsIgnoreCase("CONSULTANT")
                 ? "Ti si tehnički ekspert. Koristi dokumentaciju, alate za konverziju, ali i dodatne servisne parametre: [Podešavanja: Port 8080, DB_Timeout: 30s, Max_Users: 500]."
                 : "Ti si ljubazni asistent. Koristi isključivo priloženu dokumentaciju i dostupne alate.";
@@ -83,7 +89,7 @@ public class ChatService {
 
         SearchRequest searchRequest = SearchRequest.defaults().withTopK(3).withFilterExpression(filter);
 
-        return this.chatClient.prompt()
+        var response = this.chatClient.prompt()
                 .system(systemPrompt)
                 .user(userMessage)
                 .functions(activeFunctions.toArray(new String[0]))
@@ -91,7 +97,20 @@ public class ChatService {
                 .advisors(new QuestionAnswerAdvisor(vectorStore, searchRequest, this.RAG_PROMPT_TEMPLATE))
                 .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, sessionId))
                 .call()
-                .content();
+                .chatResponse();
+
+        long endTime = System.currentTimeMillis();
+        double responseTime = ((endTime - startTime)/1000.0);
+
+        long totalTokens = response.getMetadata().getUsage().getTotalTokens();
+
+        List<Document> documents = response.getMetadata().get(QuestionAnswerAdvisor.RETRIEVED_DOCUMENTS);
+
+        String modelResponse = response.getResult().getOutput().getContent();
+
+        auditLogService.save(userMessage, modelResponse, documents, totalTokens, responseTime, role, sessionId);
+
+        return modelResponse;
     }
 
     private boolean isOutOfScope(String userMessage) {
