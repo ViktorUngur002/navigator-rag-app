@@ -18,7 +18,7 @@ spring.ai.vectorstore.pgvector.index-type=none
 spring.ai.vectorstore.pgvector.distance-type=COSINE_DISTANCE
 
 # Currency API Configuration
-currency.api.key=YOUR_CURRENCY_API_KEY_HERE
+currency.api.key=d943dadf2b244091976900c6419d6bd8
 currency.api.base-url=https://api.currencyfreaks.com/v2.0/rates/latest
 
 # Main Chat Model (GPT-5.2 Equivalent)
