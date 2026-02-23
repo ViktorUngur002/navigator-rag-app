@@ -9,10 +9,15 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
+import org.springframework.util.StreamUtils;
+import org.springframework.core.io.Resource;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
@@ -22,20 +27,14 @@ public class ChatService {
     public final ChatClient chatClient;
     public final AuditLogService auditLogService;
     private final ChatClient guardrailClient;
-    public final VectorStore vectorStore;
+    public final VectorStore consultantTable;
+    public final VectorStore clientTable;
     public final ChatMemory chatMemory;
-    private final String RAG_PROMPT_TEMPLATE = """
-            Ti si asistent u sistemu Business Navigator. 
-            Ispod se nalazi kontekst iz dokumentacije i prethodna istorija razgovora.
-            Koristi oba izvora da odgovoriš na pitanje, ali nemoj koristiti svoje opste znanje. 
-            Ako se odgovor ne nalazi u dokumentaciji, ali ga znaš iz istorije, slobodno ga koristi.
-            
-            KONTEKST:
-            {question_answer_context}
-            """;
+    private String rag_prompt_template;
 
     public ChatService(ChatClient.Builder builder,
-                       VectorStore vectorStore,
+                       @Qualifier("ConsultantDatabase") VectorStore consultantTable,
+                       @Qualifier("ClientDatabase") VectorStore clientTable,
                        AuditLogService auditLogService,
                        ChatMemory chatMemory,
                        @Value("${app.ai.main.model}") String mainModel,
@@ -43,11 +42,13 @@ public class ChatService {
                        @Value("${app.ai.guardrail.model}") String guardModel,
                        @Value("${app.ai.guardrail.temperature}") Double guardTemp) {
 
-        this.vectorStore = vectorStore;
+        this.consultantTable = consultantTable;
+        this.clientTable = clientTable;
         this.auditLogService = auditLogService;
         this.chatMemory = chatMemory;
+        this.rag_prompt_template = this.getPrompt("RAG_prompt_template.txt");
 
-        // Main Client for RAG and Tools
+        // Glavni model koji odgovara na pitanja
         this.chatClient = builder
                 .defaultOptions(OpenAiChatOptions.builder()
                         .withModel(mainModel)
@@ -55,7 +56,7 @@ public class ChatService {
                         .build())
                 .build();
 
-        // Lightweight Guardrail Client
+        // Guardrail model koji ne dozvoljava opsta pitanja usera
         this.guardrailClient = builder
                 .defaultOptions(OpenAiChatOptions.builder()
                         .withModel(guardModel)
@@ -64,7 +65,9 @@ public class ChatService {
                 .build();
     }
 
+    // Metoda koja koristi glavni model da bi odgovorila na pitanje, koristeci kontekst iz baze podataka
     public String generateRespone(String sessionId, String role, String userMessage) {
+
         if(isOutOfScope(userMessage)){
             return "Ovo pitanje je izvan opsega aplikacije Business Navigator RAG.";
         }
@@ -72,19 +75,19 @@ public class ChatService {
         long startTime = System.currentTimeMillis();
 
         String systemPrompt = role.equalsIgnoreCase("CONSULTANT")
-                ? "Ti si tehnički ekspert. Koristi dokumentaciju, alate za konverziju, ali i dodatne servisne parametre: [Podešavanja: Port 8080, DB_Timeout: 30s, Max_Users: 500]."
-                : "Ti si ljubazni asistent. Koristi isključivo priloženu dokumentaciju i dostupne alate.";
+                ? this.getPrompt("consultant_system_prompt.txt")
+                : this.getPrompt("client_system_prompt.txt");
 
         FilterExpressionBuilder b = new FilterExpressionBuilder();
         var filter = role.equalsIgnoreCase("CLIENT")
                 ? b.eq("file_name", "manual.pdf").build()
                 : null;
 
-        List<String> activeFunctions = new ArrayList<>();
-        activeFunctions.add("convertCurrency");
-
-        if(role.equalsIgnoreCase("CLIENT")) {
-            activeFunctions.add("getSalesData");
+        VectorStore currentlyUsedTable;
+        if(role.equalsIgnoreCase("CONSULTANT")){
+            currentlyUsedTable = consultantTable;
+        } else {
+            currentlyUsedTable = clientTable;
         }
 
         SearchRequest searchRequest = SearchRequest.defaults().withTopK(3).withFilterExpression(filter);
@@ -92,9 +95,8 @@ public class ChatService {
         var response = this.chatClient.prompt()
                 .system(systemPrompt)
                 .user(userMessage)
-                .functions(activeFunctions.toArray(new String[0]))
                 .advisors(new MessageChatMemoryAdvisor(chatMemory))
-                .advisors(new QuestionAnswerAdvisor(vectorStore, searchRequest, this.RAG_PROMPT_TEMPLATE))
+                .advisors(new QuestionAnswerAdvisor(currentlyUsedTable, searchRequest, this.rag_prompt_template))
                 .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, sessionId))
                 .call()
                 .chatResponse();
@@ -113,27 +115,21 @@ public class ChatService {
         return modelResponse;
     }
 
+    // Metoda koja dobavlja sacuvane promptove
+    private String getPrompt(String fileName) {
+        try {
+            PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+            Resource resource = resolver.getResource("classpath:prompts/" +  fileName);
+            return StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load prompt file: " + fileName, e);
+        }
+    }
+
+    // Metoda koja proverava da li je upit van opsega aplikacije
     private boolean isOutOfScope(String userMessage) {
-        String classificationPrompt = """
-                Ti si inteligentni filter za poslovnu aplikaciju Business Navigator RAG. 
-                Tvoj zadatak je da procenis nameru korisnika.
-                Odgovori ISKLJUČIVO sa „VAN_TEME“ ili „U_TEMI“.
-                
-                DOZVOLJENI UPITI:
-                - Pitanja i upiti vezani za jedan ERP sistem, i sve njegove module.
-                - Upiti o koriscenju softvera, modulima i podesavanjima.
-                - Upiti o klijentima, prodaji, fakturama ili iznosima.
-                - Provera kursne liste ili konverzija valuta.
-                - Tehnicka pitanja (timeout, portovi, login).
-                - Tehnicka pitanja vezana za EFakturu, Google OAuth, Microsoft Graph API
-                
-                ZABRANJENI UPITI:
-                - Opsta istorija, geografija ili nauka.
-                - Zabava, sport, filmovi ili recepti.
-                - Pitanja koja nemaju apsolutno nikakve veze sa biznisom ili ERP sistemima.
-                
-                Korisnicki upit: "%s"
-                """.formatted(userMessage);
+        String template = this.getPrompt("scope_guardrail_prompt.txt");
+        String classificationPrompt = template.formatted(userMessage);
 
         String result = this.guardrailClient.prompt()
                 .user(classificationPrompt)

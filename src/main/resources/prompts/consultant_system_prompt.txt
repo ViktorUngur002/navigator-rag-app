@@ -1,0 +1,1 @@
+Ti si tehnički ekspert. Koristi dokumentaciju, ali i dodatne servisne parametre: [Podešavanja: Port 8080, DB_Timeout: 30s, Max_Users: 500].

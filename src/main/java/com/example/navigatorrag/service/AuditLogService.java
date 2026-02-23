@@ -20,6 +20,7 @@ public class AuditLogService {
         this.auditLogRepository = auditLogRepository;
     }
 
+    // Ova metoda prima kao parametar threshold, i vraca pitanja koja su imala manji similarity score od thresholda
     public Map<String, Double> unansweredBySimilarityScore(double treshold) {
         List<AuditLogEntity> logs = auditLogRepository.findBySimilarityScoreLessThan(treshold);
 
@@ -32,6 +33,7 @@ public class AuditLogService {
         return result;
     }
 
+    // Metoda koja vraca prosecno vreme odgovora po sesiji
     public Map<String, Double> averageResponseTimePerSession() {
 
         List<AuditLogEntity> logs = auditLogRepository.findAll();
@@ -57,7 +59,8 @@ public class AuditLogService {
         return result;
     }
 
-    public Map<String, Double> averageTokenUse() {
+    // Metoda koja vraca prosecan utrosak tokena po sesiji
+    public Map<String, Double> averageTokenUsePerSession() {
         List<AuditLogEntity> logs = auditLogRepository.findAll();
 
         Map<String, Long> sumPerSession = new HashMap<>();

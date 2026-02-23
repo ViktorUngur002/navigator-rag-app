@@ -19,6 +19,7 @@ public class ChatController {
         this.chatService = chatService;
     }
 
+    // Chat endpoint
     @PostMapping("/chat")
     public String chat(@RequestParam String role, @RequestBody ChatRequest request) {
         activeSessions.add(request.sessionId());

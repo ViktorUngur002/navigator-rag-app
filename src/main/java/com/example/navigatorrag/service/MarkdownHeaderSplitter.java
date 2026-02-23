@@ -12,6 +12,7 @@ import java.nio.file.Path;
 
 @Service
 public class MarkdownHeaderSplitter {
+    // Metoda koja deli wiki fajlove na chunk-ove koristeci H2 tag
     public List<Document> splitByH2(List<Document> documents, String filename) {
         List<Document> chunks = new ArrayList<>();
 
